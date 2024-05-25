@@ -72,16 +72,55 @@ fn move_handler(_req: &mut Request, res: &mut Response) {
     res.status_code(StatusCode::OK).render(Text::Plain("MOVE"));
 }
 
+#[handler]
+fn propfind_handler(_req: &mut Request, res: &mut Response) {
+    // see: https://learn.microsoft.com/en-us/previous-versions/office/developer/exchange-server-2003/aa142960(v=exchg.65)
+
+    res.status_code(StatusCode::OK)
+        .render(Text::Plain("propfind_handler"));
+}
+
+#[handler]
+fn mkcol_handler(_req: &mut Request, res: &mut Response) {
+    /*
+    MKCOL creates a new collection resource at the location specified by the Request-URI.
+    If the Request-URI is already mapped to a resource, then the MKCOL MUST fail.
+    During MKCOL processing, a server MUST make the Request-URI an internal member of its parent collection,
+    unless the Request-URI is “/”. If no such ancestor exists, the method MUST fail.
+
+    When the MKCOL operation creates a new collection resource, all ancestors MUST already exist,
+    or the method MUST fail with a 409 (Conflict) status code.
+    (RFC 4918: HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV))
+     */
+
+    res.status_code(StatusCode::OK).render(Text::Plain("mkcol"));
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
     CLIENT.get_or_init(init_client).await;
+
+    // PUT http://localhost:3000/Enpass/vault.enpassdbsync
+    // PROPFIND http://localhost:3000/Enpass/vault.enpassdbsync
+    // PROPFIND http://localhost:3000/
+    // MKCOL http://localhost:3000/Enpass/
 
     let router = Router::with_path("<**path>")
         .get(get_handler)
         .head(ok_handler)
         .put(ok_handler)
         .delete(ok_handler)
+        .push(
+            Router::new()
+                .filter_fn(|req, _| req.method() == Method::from_bytes(b"PROPFIND").unwrap())
+                .goal(propfind_handler),
+        )
+        .push(
+            Router::new()
+                .filter_fn(|req, _| req.method() == Method::from_bytes(b"MKCOL").unwrap())
+                .goal(mkcol_handler),
+        )
         .push(
             Router::new()
                 .filter_fn(|req, _| req.method() == Method::from_bytes(b"COPY").unwrap())
