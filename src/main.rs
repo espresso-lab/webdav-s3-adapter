@@ -72,11 +72,9 @@ async fn get_handler(req: &mut Request, res: &mut Response) {
 //     let expires = req.headers().get(header::EXPIRES).and_then(header_string);
 #[handler]
 async fn put_handler(req: &mut Request, res: &mut Response) {
-    warn!("put_handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let path = req.params().get("**path").cloned().unwrap_or_default();
     let payload = req.payload().await.unwrap().clone();
-    let bytes = ByteStream::from_static(payload.borrow());
 
     //     let body_stream: Box<Stream<Item=Bytes, Error=Error>> = Box::new(
     //     req.payload()
@@ -102,7 +100,7 @@ async fn put_handler(req: &mut Request, res: &mut Response) {
         .put_object()
         .bucket(&bucket_name)
         .key(path)
-        .body(bytes)
+        .body(ByteStream::new(payload.into()))
         .send()
         .await;
 
