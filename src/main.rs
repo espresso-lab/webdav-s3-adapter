@@ -1,12 +1,11 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_s3 as s3;
-use once_cell::sync::Lazy;
+use dotenv::dotenv;
 use s3::Client;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use std::{env, process};
+use std::env;
 use tokio::sync::OnceCell;
-use tracing::error;
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
@@ -88,6 +87,7 @@ fn mkcol_handler(_req: &mut Request, res: &mut Response) {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt().init();
     CLIENT.get_or_init(init_client).await;
 
