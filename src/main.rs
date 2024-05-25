@@ -1,6 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_s3 as s3;
 use dotenv::dotenv;
+use s3::primitives::ByteStream;
 use s3::Client;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
@@ -55,6 +56,29 @@ async fn get_handler(req: &mut Request, res: &mut Response) {
     }
 
     res.status_code(StatusCode::OK);
+}
+
+#[handler]
+async fn put_handler(req: &mut Request, res: &mut Response) {
+    let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
+    let path = req.params().get("**path").cloned().unwrap_or_default();
+    let file = req.first_file().await.unwrap();
+
+    let upload_result = CLIENT
+        .get()
+        .unwrap()
+        .put_object()
+        .bucket(&bucket_name)
+        .key(path)
+        .body(ByteStream::from_path(file.path()).await.unwrap())
+        .send()
+        .await;
+
+    if !upload_result.unwrap().checksum_sha256.unwrap().is_empty() {
+        res.status_code(StatusCode::NO_CONTENT);
+    }
+
+    res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[handler]
@@ -115,12 +139,12 @@ async fn main() {
     // PUT http://localhost:3000/Enpass/vault.enpassdbsync
     // PROPFIND http://localhost:3000/Enpass/vault.enpassdbsync
     // PROPFIND http://localhost:3000/
-    // MKCOL http://localhost:3000/Enpass/
+    // MKCOL http://localhost:3000/Enpass/ --> OK
 
     let router = Router::with_path("<bucket>/<**path>")
         .get(get_handler)
         .head(ok_handler)
-        .put(ok_handler)
+        .put(put_handler)
         .delete(ok_handler)
         .push(
             Router::new()
