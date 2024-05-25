@@ -34,8 +34,7 @@ async fn init_client() -> Client {
 
 #[handler]
 fn ok_handler(_req: &mut Request, res: &mut Response) {
-    warn!("OK");
-    res.status_code(StatusCode::OK);
+    res.status_code(StatusCode::OK).render(Text::Plain("OK"));
 }
 
 #[handler]
@@ -141,25 +140,28 @@ async fn propfind_handler(req: &mut Request, res: &mut Response) {
 
     match get_result {
         Ok(obj) => {
-            let xml = r#"
+            warn!("File xml");
+
+            let xml = r#"            
             <?xml version="1.0"?>
             <a:multistatus
-            xmlns:b="urn:uuid:c2f41010-65b3-11d1-a29f-00aa00c14882/"
             xmlns:a="DAV:">
             <a:response>
-            <a:href>https://server/public/test2/item1.txt</a:href>
+            <a:href>http://127.0.0.1:3000/dummy/Enpass/vault.enpassdbsync</a:href>
             <a:propstat>
                 <a:status>HTTP/1.1 200 OK</a:status>
                 <a:prop>
-                    <a:getcontenttype>text/plain</a:getcontenttype>
-                    <a:getcontentlength b:dt="int">33</a:getcontentlength>
+                    <a:getcontenttype>application/octet-stream</a:getcontenttype>
+                    <a:getcontentlength>33</a:getcontentlength>
                 </a:prop>
             </a:propstat>
             </a:response>
             </a:multistatus>
             "#;
 
-            return res.status_code(StatusCode::OK).render(Text::Xml(xml));
+            return res
+                .status_code(StatusCode::MULTI_STATUS)
+                .render(Text::Xml(xml));
         }
         Err(err) => {}
     }
@@ -258,6 +260,7 @@ async fn main() {
     // MKCOL http://localhost:3000/Enpass/ --> OK
 
     let router = Router::new()
+        .push(Router::with_path("/status").get(ok_handler))
         .push(
             Router::with_path("<bucket>/<**path>")
                 .get(get_handler)
@@ -286,8 +289,7 @@ async fn main() {
                         .filter_fn(|req, _| req.method() == Method::from_bytes(b"MOVE").unwrap())
                         .goal(move_handler),
                 ),
-        )
-        .push(Router::with_path("/status").get(ok_handler));
+        );
 
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
     Server::new(acceptor).serve(router).await;
