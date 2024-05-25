@@ -9,16 +9,6 @@ use tokio::sync::OnceCell;
 use tracing::error;
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
-static BUCKET_NAME: Lazy<String> = Lazy::new(|| {
-    let bucket_name = env::var("S3_BUCKET_NAME").unwrap_or("".to_string());
-
-    if bucket_name.is_empty() {
-        error!("Env 'S3_BUCKET_NAME' is empty.");
-        process::exit(1);
-    }
-
-    bucket_name
-});
 
 // Initialize S3 slient
 async fn init_client() -> Client {
@@ -48,7 +38,7 @@ fn ok_handler(_req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn get_handler(req: &mut Request, res: &mut Response) {
-    let bucket_name = BUCKET_NAME.to_string();
+    let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let my_client = CLIENT.get().unwrap();
 
     let result_objects = my_client
@@ -106,7 +96,7 @@ async fn main() {
     // PROPFIND http://localhost:3000/
     // MKCOL http://localhost:3000/Enpass/
 
-    let router = Router::with_path("<**path>")
+    let router = Router::with_path("<bucket>/<**path>")
         .get(get_handler)
         .head(ok_handler)
         .put(ok_handler)
