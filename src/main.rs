@@ -5,11 +5,9 @@ use s3::primitives::ByteStream;
 use s3::Client;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use std::borrow::Borrow;
 use std::env;
-use tokio::io::BufReader;
 use tokio::sync::OnceCell;
-use tracing::info;
+use tracing::{debug, error, info, warn};
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
