@@ -6,8 +6,7 @@ use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
 use std::env;
 use tokio::sync::OnceCell;
-use tracing::error;
-use tracing::{info, warn};
+use tracing::info;
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
@@ -40,17 +39,16 @@ fn ok_handler(_req: &mut Request, res: &mut Response) {
 #[handler]
 async fn get_handler(req: &mut Request, res: &mut Response) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
+    let path = req.params().get("**path").cloned().unwrap_or_default();
     let client = CLIENT.get().unwrap();
 
     let result = client
         .list_objects_v2()
         .bucket(&bucket_name)
-        .prefix(req.uri().path().to_string())
+        .prefix(path)
         .send()
         .await
         .unwrap();
-
-    info!("Bucket: {}", bucket_name);
 
     for object in result.contents() {
         info!(" - {}", object.key().unwrap_or("Unknown"));
