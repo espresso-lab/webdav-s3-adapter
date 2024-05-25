@@ -5,7 +5,9 @@ use s3::primitives::ByteStream;
 use s3::Client;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
+use std::borrow::Borrow;
 use std::env;
+use tokio::io::BufReader;
 use tokio::sync::OnceCell;
 use tracing::error;
 use tracing::{info, warn};
@@ -35,11 +37,14 @@ async fn init_client() -> Client {
 
 #[handler]
 fn ok_handler(_req: &mut Request, res: &mut Response) {
+    warn!("OK");
     res.status_code(StatusCode::OK);
 }
 
 #[handler]
 async fn get_handler(req: &mut Request, res: &mut Response) {
+    warn!("get_handler");
+
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let client = CLIENT.get().unwrap();
 
@@ -60,11 +65,38 @@ async fn get_handler(req: &mut Request, res: &mut Response) {
     res.status_code(StatusCode::OK);
 }
 
+// TODO:
+// let cache_control = req.headers().get(header::CACHE_CONTROL).and_then(header_string);
+//     let content_disposition = req.headers().get(header::CONTENT_DISPOSITION).and_then(header_string);
+//     let content_encoding = req.headers().get(header::CONTENT_ENCODING).and_then(header_string);
+//     let content_language = req.headers().get(header::CONTENT_LANGUAGE).and_then(header_string);
+//     let content_type = req.headers().get(header::CONTENT_TYPE).and_then(header_string);
+//     let expires = req.headers().get(header::EXPIRES).and_then(header_string);
 #[handler]
 async fn put_handler(req: &mut Request, res: &mut Response) {
+    warn!("put_handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let path = req.params().get("**path").cloned().unwrap_or_default();
-    let file = req.first_file().await.unwrap();
+    let payload = req.payload().await.unwrap().clone();
+    let bytes = ByteStream::from_static(payload.borrow());
+
+    //     let body_stream: Box<Stream<Item=Bytes, Error=Error>> = Box::new(
+    //     req.payload()
+    //         .map_err(|_e| ErrorInternalServerError("Something went wrong while reading request stream"))
+    // );
+
+    // req.payload();
+
+    // file.clone().path().file_name().unwrap().to_str();
+    // warn!(
+    //     "file path {}",
+    //     file.clone().path().file_name().unwrap().to_str().unwrap()
+    // );
+
+    // req.body()
+    // let reader = BufReader::new(req.body());
+    // stream::iter(reader.bytes());
+    // ByteStream::from_static(req.body());
 
     let upload_result = CLIENT
         .get()
@@ -72,7 +104,7 @@ async fn put_handler(req: &mut Request, res: &mut Response) {
         .put_object()
         .bucket(&bucket_name)
         .key(path)
-        .body(ByteStream::from_path(file.path()).await.unwrap())
+        .body(bytes)
         .send()
         .await;
 
@@ -85,20 +117,107 @@ async fn put_handler(req: &mut Request, res: &mut Response) {
 
 #[handler]
 fn copy_handler(_req: &mut Request, res: &mut Response) {
+    warn!("copy_handler");
     res.status_code(StatusCode::OK).render(Text::Plain("COPY"));
 }
 
 #[handler]
 fn move_handler(_req: &mut Request, res: &mut Response) {
+    warn!("move_handler");
     res.status_code(StatusCode::OK).render(Text::Plain("MOVE"));
 }
 
 #[handler]
-fn propfind_handler(_req: &mut Request, res: &mut Response) {
+async fn propfind_handler(req: &mut Request, res: &mut Response) {
     // see: https://learn.microsoft.com/en-us/previous-versions/office/developer/exchange-server-2003/aa142960(v=exchg.65)
 
-    res.status_code(StatusCode::OK)
-        .render(Text::Plain("propfind_handler"));
+    let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
+    let path = req.params().get("**path").cloned().unwrap_or_default();
+
+    warn!("propfind_handler | {}", path);
+
+    let get_result = CLIENT
+        .get()
+        .unwrap()
+        .get_object()
+        .bucket(&bucket_name)
+        .key(path.clone())
+        .send()
+        .await;
+
+    match get_result {
+        Ok(obj) => {
+            let xml = r#"
+            <?xml version="1.0"?>
+            <a:multistatus
+            xmlns:b="urn:uuid:c2f41010-65b3-11d1-a29f-00aa00c14882/"
+            xmlns:a="DAV:">
+            <a:response>
+            <a:href>https://server/public/test2/item1.txt</a:href>
+            <a:propstat>
+                <a:status>HTTP/1.1 200 OK</a:status>
+                <a:prop>
+                    <a:getcontenttype>text/plain</a:getcontenttype>
+                    <a:getcontentlength b:dt="int">33</a:getcontentlength>
+                </a:prop>
+            </a:propstat>
+            </a:response>
+            </a:multistatus>
+            "#;
+
+            return res.status_code(StatusCode::OK).render(Text::Xml(xml));
+        }
+        Err(err) => {}
+    }
+
+    // If it's not a file, then check if it's a folder
+
+    let list_result = CLIENT
+        .get()
+        .unwrap()
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .prefix(path)
+        .send()
+        .await;
+
+    match list_result {
+        Ok(obj) => {
+            let xml = r#"
+            <?xml version="1.0" ?>
+            <D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href>https://www.contoso.com/public/container/</D:href>
+                <D:propstat>
+                        <D:prop xmlns:R="https://www.contoso.com/schema/">
+                            <R:author>Rob Caron</R:author>
+                            <R:editor>Jessup Meng</R:editor>
+                            <D:creationdate>
+                                1999-11-01T17:42:21-06:30
+                            </D:creationdate>
+                            <D:displayname>
+                                Example Collection
+                            </D:displayname>
+                            <D:resourcetype><D:collection></D:resourcetype>
+                            <D:supportedlock>
+                                <D:lockentry>
+                                <D:lockscope><D:shared/></D:lockscope>
+                                <D:locktype><D:write/></D:locktype>
+                                </D:lockentry>
+                            </D:supportedlock>
+                        </D:prop>
+                        <D:status>HTTP/1.1 200 OK</D:status>
+                    </D:propstat>
+                    </D:response>
+            </D:multistatus>
+            "#;
+
+            return res.status_code(StatusCode::OK).render(Text::Xml(xml));
+        }
+        Err(err) => {}
+    }
+
+    res.status_code(StatusCode::NOT_FOUND);
 }
 
 /*
@@ -113,6 +232,7 @@ or the method MUST fail with a 409 (Conflict) status code.
  */
 #[handler]
 async fn mkcol_handler(req: &mut Request, res: &mut Response) {
+    warn!("mkcol handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let path = req.params().get("**path").cloned().unwrap_or_default();
 
