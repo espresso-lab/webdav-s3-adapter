@@ -6,7 +6,7 @@ use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
 use std::{env, process};
 use tokio::sync::OnceCell;
-use tracing::error;
+use tracing::{debug, error, warn};
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
@@ -70,20 +70,35 @@ fn propfind_handler(_req: &mut Request, res: &mut Response) {
         .render(Text::Plain("propfind_handler"));
 }
 
+/*
+MKCOL creates a new collection resource at the location specified by the Request-URI.
+If the Request-URI is already mapped to a resource, then the MKCOL MUST fail.
+During MKCOL processing, a server MUST make the Request-URI an internal member of its parent collection,
+unless the Request-URI is “/”. If no such ancestor exists, the method MUST fail.
+
+When the MKCOL operation creates a new collection resource, all ancestors MUST already exist,
+or the method MUST fail with a 409 (Conflict) status code.
+(RFC 4918: HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV))
+ */
 #[handler]
-fn mkcol_handler(_req: &mut Request, res: &mut Response) {
-    /*
-    MKCOL creates a new collection resource at the location specified by the Request-URI.
-    If the Request-URI is already mapped to a resource, then the MKCOL MUST fail.
-    During MKCOL processing, a server MUST make the Request-URI an internal member of its parent collection,
-    unless the Request-URI is “/”. If no such ancestor exists, the method MUST fail.
+async fn mkcol_handler(req: &mut Request, res: &mut Response) {
+    let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
+    let path = req.params().get("**path").cloned().unwrap_or_default();
 
-    When the MKCOL operation creates a new collection resource, all ancestors MUST already exist,
-    or the method MUST fail with a 409 (Conflict) status code.
-    (RFC 4918: HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV))
-     */
+    let result_objects = CLIENT
+        .get()
+        .unwrap()
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .prefix(path)
+        .send()
+        .await;
 
-    res.status_code(StatusCode::OK).render(Text::Plain("mkcol"));
+    if result_objects.unwrap().key_count().unwrap_or(0) > 0 {
+        res.status_code(StatusCode::CONFLICT);
+    }
+
+    res.status_code(StatusCode::NO_CONTENT);
 }
 
 #[tokio::main]
