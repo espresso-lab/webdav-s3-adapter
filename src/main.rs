@@ -261,31 +261,37 @@ async fn main() {
     // PROPFIND http://localhost:3000/
     // MKCOL http://localhost:3000/Enpass/ --> OK
 
-    let router = Router::with_path("<bucket>/<**path>")
-        .get(get_handler)
-        .head(ok_handler)
-        .put(put_handler)
-        .delete(ok_handler)
+    let router = Router::new()
         .push(
-            Router::new()
-                .filter_fn(|req, _| req.method() == Method::from_bytes(b"PROPFIND").unwrap())
-                .goal(propfind_handler),
+            Router::with_path("<bucket>/<**path>")
+                .get(get_handler)
+                .head(ok_handler)
+                .put(put_handler)
+                .delete(ok_handler)
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| {
+                            req.method() == Method::from_bytes(b"PROPFIND").unwrap()
+                        })
+                        .goal(propfind_handler),
+                )
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"MKCOL").unwrap())
+                        .goal(mkcol_handler),
+                )
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"COPY").unwrap())
+                        .goal(copy_handler),
+                )
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"MOVE").unwrap())
+                        .goal(move_handler),
+                ),
         )
-        .push(
-            Router::new()
-                .filter_fn(|req, _| req.method() == Method::from_bytes(b"MKCOL").unwrap())
-                .goal(mkcol_handler),
-        )
-        .push(
-            Router::new()
-                .filter_fn(|req, _| req.method() == Method::from_bytes(b"COPY").unwrap())
-                .goal(copy_handler),
-        )
-        .push(
-            Router::new()
-                .filter_fn(|req, _| req.method() == Method::from_bytes(b"MOVE").unwrap())
-                .goal(move_handler),
-        );
+        .push(Router::with_path("/status").get(ok_handler));
 
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
     Server::new(acceptor).serve(router).await;
