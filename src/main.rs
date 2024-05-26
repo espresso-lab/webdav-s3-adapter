@@ -94,6 +94,13 @@ fn move_handler(_req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
+fn options_handler(_req: &mut Request, res: &mut Response) {
+    error!("options");
+    res.status_code(StatusCode::FOUND);
+    // res.status_code(StatusCode::NOT_IMPLEMENTED);
+}
+
+#[handler]
 async fn propfind_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
@@ -248,7 +255,8 @@ async fn main() {
                 .webdav_propfind(propfind_handler)
                 .webdav_mkcol(mkcol_handler)
                 .webdav_copy(copy_handler)
-                .webdav_move(move_handler),
+                .webdav_move(move_handler)
+                .options(options_handler), // TODO: Maybe before auth
         );
 
     let service = Service::new(router).hoop(Logger::new());
