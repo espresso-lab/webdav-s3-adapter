@@ -1,19 +1,15 @@
 mod utils;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::Client;
 use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use tokio::sync::OnceCell;
 use tracing::{error, info, warn};
 use utils::s3::{
-    fetch_file_from_s3, init_client, is_folder, list_objects_in_s3, upload_file_to_s3,
+    fetch_file_from_s3, init_client_for_auth, is_folder, list_objects_in_s3, upload_file_to_s3,
 };
 
 use crate::utils::s3::get_object;
 use crate::utils::webdav::{generate_webdav_propfind_response, S3ObjectOutput};
-
-static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
 #[handler]
 fn ok_handler(_req: &mut Request, res: &mut Response) {
@@ -21,11 +17,18 @@ fn ok_handler(_req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-async fn get_handler(req: &mut Request, res: &mut Response) {
+async fn get_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     warn!("get_handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
-    match fetch_file_from_s3(CLIENT.get().unwrap(), &bucket_name, &key).await {
+
+    let aws_client = init_client_for_auth(
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string(),
+    )
+    .await;
+
+    match fetch_file_from_s3(&aws_client, &bucket_name, &key).await {
         Ok((file_contents, content_type)) => {
             res.headers_mut()
                 .insert("Content-Type", content_type.parse().unwrap());
@@ -43,7 +46,7 @@ async fn get_handler(req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-async fn put_handler(req: &mut Request, res: &mut Response) {
+async fn put_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
@@ -55,7 +58,13 @@ async fn put_handler(req: &mut Request, res: &mut Response) {
         }
     };
 
-    match upload_file_to_s3(CLIENT.get().unwrap(), &bucket_name, &key, byte_stream).await {
+    let aws_client = init_client_for_auth(
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string(),
+    )
+    .await;
+
+    match upload_file_to_s3(&aws_client, &bucket_name, &key, byte_stream).await {
         Ok(upload_result) => {
             res.status_code(StatusCode::CREATED);
             res.headers_mut().insert(
@@ -86,17 +95,29 @@ fn move_handler(_req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-async fn propfind_handler(req: &mut Request, res: &mut Response) {
+async fn propfind_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
     warn!("propfind_handler | {}", key);
 
-    if is_folder(CLIENT.get().unwrap(), &bucket_name, &key)
+    let aws_client = init_client_for_auth(
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string(),
+    )
+    .await;
+
+    warn!(
+        "user: {}, pw: {}",
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string()
+    );
+
+    if is_folder(&aws_client, &bucket_name, &key)
         .await
         .unwrap_or_default()
     {
-        match list_objects_in_s3(CLIENT.get().unwrap(), &bucket_name, &key, Some("/")).await {
+        match list_objects_in_s3(&aws_client, &bucket_name, &key, Some("/")).await {
             Ok(obj) => {
                 let response = generate_webdav_propfind_response(
                     &bucket_name,
@@ -111,7 +132,7 @@ async fn propfind_handler(req: &mut Request, res: &mut Response) {
             }
         }
     } else {
-        match get_object(CLIENT.get().unwrap(), &bucket_name, &key).await {
+        match get_object(&aws_client, &bucket_name, &key).await {
             Ok(obj) => {
                 let response = generate_webdav_propfind_response(
                     &bucket_name,
@@ -129,13 +150,17 @@ async fn propfind_handler(req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-async fn mkcol_handler(req: &mut Request, res: &mut Response) {
+async fn mkcol_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let path = req.params().get("**path").cloned().unwrap_or_default();
 
-    let result_objects = CLIENT
-        .get()
-        .unwrap()
+    let aws_client = init_client_for_auth(
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string(),
+    )
+    .await;
+
+    let result_objects = aws_client
         .list_objects_v2()
         .bucket(&bucket_name)
         .prefix(path)
@@ -218,7 +243,6 @@ async fn test(req: &mut Request, _res: &mut Response) {
 async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt().init();
-    CLIENT.get_or_init(init_client).await;
 
     let router = Router::new()
         .push(Router::with_path("/status").get(ok_handler))

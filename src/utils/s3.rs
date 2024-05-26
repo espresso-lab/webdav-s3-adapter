@@ -1,7 +1,7 @@
 use std::env;
 
-use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
+    config::Credentials,
     operation::{
         delete_object::DeleteObjectOutput, get_object::GetObjectOutput,
         list_objects_v2::ListObjectsV2Output, put_object::PutObjectOutput,
@@ -11,20 +11,25 @@ use aws_sdk_s3::{
 };
 use tracing::info;
 
-pub async fn init_client() -> Client {
-    let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+pub async fn init_client_for_auth(access_key_id: String, secret_access_key: String) -> Client {
+    let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "_");
+
+    // let config: aws_config::SdkConfig = aws_config::load_defaults(BehaviorVersion::latest()).await;
     let s3_endpoint = env::var("S3_ENDPOINT").unwrap_or("".to_string());
-    if s3_endpoint.is_empty() {
-        return aws_sdk_s3::Client::new(&config);
-    }
-    let local_config = aws_sdk_s3::config::Builder::from(&config)
+    // if s3_endpoint.is_empty() {
+    //     return aws_sdk_s3::Client::new(&config);
+    // }
+
+    let local_config = aws_sdk_s3::config::Builder::new()
         .endpoint_url(s3_endpoint)
         .force_path_style(
             env::var("S3_FORCE_PATH_STYLE")
                 .unwrap_or("".to_string())
                 .eq("true"),
         )
+        .credentials_provider(credentials)
         .build();
+
     return aws_sdk_s3::Client::from_conf(local_config);
 }
 
@@ -146,5 +151,6 @@ pub async fn is_folder(
         .max_keys(1)
         .send()
         .await?;
+
     Ok(result.key_count().unwrap_or_default() > 0)
 }
