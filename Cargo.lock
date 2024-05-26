@@ -4408,6 +4408,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "validator",
+ "xml-rs",
 ]
 
 [[package]]

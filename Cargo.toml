@@ -17,3 +17,4 @@ aws-sdk-s3 = { version = "1", features = ["rt-tokio", "behavior-version-latest"]
 validator = { version = "0", features = ["derive"], default-features = false }
 uuid = { version = "1", features = ["fast-rng", "v4"] }
 dotenv = "0.15.0"
+xml-rs = "0.8.20"
