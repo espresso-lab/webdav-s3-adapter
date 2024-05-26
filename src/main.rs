@@ -151,6 +151,16 @@ async fn mkcol_handler(req: &mut Request, res: &mut Response) {
     res.status_code(StatusCode::NO_CONTENT);
 }
 
+struct Validator;
+impl BasicAuthValidator for Validator {
+    async fn validate(&self, username: &str, password: &str, depot: &mut Depot) -> bool {
+        depot.insert("auth_user", username.to_owned());
+        depot.insert("auth_pass", password.to_owned());
+
+        !username.is_empty() && !password.is_empty()
+    }
+}
+
 #[handler]
 async fn test(req: &mut Request, _res: &mut Response) {
     let method = req.method();
@@ -167,6 +177,7 @@ async fn main() {
         .push(Router::with_path("/status").get(ok_handler))
         .push(
             Router::with_path("<bucket>/<**path>")
+                .hoop(BasicAuth::new(Validator))
                 .hoop(test)
                 .get(get_handler)
                 .head(ok_handler)
