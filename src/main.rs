@@ -3,7 +3,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use utils::s3::{
     fetch_file_from_s3, init_client_for_auth, is_folder, list_objects_in_s3, upload_file_to_s3,
 };
@@ -18,7 +18,6 @@ fn ok_handler(_req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn get_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
-    warn!("get_handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
@@ -39,8 +38,8 @@ async fn get_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
             let _ = res.write_body(file_contents);
         }
         Err(_) => {
-            res.status_code(StatusCode::NOT_FOUND);
-            let _ = res.write_body("File not found");
+            res.status_code(StatusCode::NOT_FOUND)
+                .render(Text::Plain("File not found"));
         }
     }
 }
@@ -99,15 +98,13 @@ async fn propfind_handler(req: &mut Request, res: &mut Response, depot: &mut Dep
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
-    warn!("propfind_handler | {}", key);
-
     let aws_client = init_client_for_auth(
         depot.get::<String>("auth_user").unwrap().to_string(),
         depot.get::<String>("auth_pass").unwrap().to_string(),
     )
     .await;
 
-    warn!(
+    debug!(
         "user: {}, pw: {}",
         depot.get::<String>("auth_user").unwrap().to_string(),
         depot.get::<String>("auth_pass").unwrap().to_string()
@@ -205,30 +202,24 @@ impl WebDavRouter for Router {
     #[inline]
     fn webdav_copy<H: Handler>(self, goal: H) -> Self {
         self.push(
-            Router::with_filter_fn(|req, _| {
-                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
-            })
-            .goal(goal),
+            Router::with_filter_fn(|req, _| req.method() == Method::from_bytes(b"COPY").unwrap())
+                .goal(goal),
         )
     }
 
     #[inline]
     fn webdav_move<H: Handler>(self, goal: H) -> Self {
         self.push(
-            Router::with_filter_fn(|req, _| {
-                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
-            })
-            .goal(goal),
+            Router::with_filter_fn(|req, _| req.method() == Method::from_bytes(b"MOVE").unwrap())
+                .goal(goal),
         )
     }
 
     #[inline]
     fn webdav_mkcol<H: Handler>(self, goal: H) -> Self {
         self.push(
-            Router::with_filter_fn(|req, _| {
-                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
-            })
-            .goal(goal),
+            Router::with_filter_fn(|req, _| req.method() == Method::from_bytes(b"MKCOL").unwrap())
+                .goal(goal),
         )
     }
 }
