@@ -150,6 +150,16 @@ async fn mkcol_handler(req: &mut Request, res: &mut Response) {
     res.status_code(StatusCode::NO_CONTENT);
 }
 
+struct Validator;
+impl BasicAuthValidator for Validator {
+    async fn validate(&self, username: &str, password: &str, depot: &mut Depot) -> bool {
+        depot.insert("auth_user", username.to_owned());
+        depot.insert("auth_pass", password.to_owned());
+
+        !username.is_empty() && !password.is_empty()
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -160,6 +170,7 @@ async fn main() {
         .push(Router::with_path("/status").get(ok_handler))
         .push(
             Router::with_path("<bucket>/<**path>")
+                .hoop(BasicAuth::new(Validator))
                 .get(get_handler)
                 .head(ok_handler)
                 .put(put_handler)
