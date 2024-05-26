@@ -46,6 +46,7 @@ pub async fn fetch_file_from_s3(
         .unwrap_or("application/octet-stream")
         .to_string();
     let body = result.body.collect().await.unwrap().into_bytes();
+
     Ok((body.to_vec(), content_type))
 }
 
@@ -62,6 +63,7 @@ pub async fn list_objects_in_s3(
         .delimiter(delimiter.unwrap_or_default())
         .send()
         .await?;
+
     Ok(result)
 }
 
@@ -78,6 +80,7 @@ pub async fn upload_file_to_s3(
         .body(body)
         .send()
         .await?;
+
     Ok(result)
 }
 
@@ -92,6 +95,7 @@ pub async fn delete_file_from_s3(
         .key(key)
         .send()
         .await?;
+
     Ok(result)
 }
 
@@ -103,6 +107,7 @@ pub async fn delete_files_from_s3(
     for key in keys {
         delete_file_from_s3(client, bucket, &key).await?;
     }
+
     Ok(())
 }
 
@@ -121,6 +126,7 @@ pub async fn delete_folder_from_s3(
         }
     }
     delete_files_from_s3(client, bucket, keys).await?;
+
     Ok(())
 }
 
@@ -130,6 +136,7 @@ pub async fn get_object(
     key: &str,
 ) -> Result<GetObjectOutput, aws_sdk_s3::Error> {
     let result = client.get_object().bucket(bucket).key(key).send().await?;
+
     Ok(result)
 }
 
