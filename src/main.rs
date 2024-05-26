@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
 use tokio::sync::OnceCell;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 use utils::s3::{
     fetch_file_from_s3, init_client, is_folder, list_objects_in_s3, upload_file_to_s3,
 };
@@ -46,16 +46,16 @@ async fn get_handler(req: &mut Request, res: &mut Response) {
 async fn put_handler(req: &mut Request, res: &mut Response) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
-    let payload = req.payload().await.unwrap().clone();
 
-    match upload_file_to_s3(
-        CLIENT.get().unwrap(),
-        &bucket_name,
-        &key,
-        ByteStream::new(payload.into()),
-    )
-    .await
-    {
+    let byte_stream = match req.payload().await {
+        Ok(bytes) => ByteStream::from(bytes.clone()),
+        Err(_) => {
+            res.status_code(StatusCode::BAD_REQUEST);
+            return;
+        }
+    };
+
+    match upload_file_to_s3(CLIENT.get().unwrap(), &bucket_name, &key, byte_stream).await {
         Ok(upload_result) => {
             res.status_code(StatusCode::CREATED);
             res.headers_mut().insert(
@@ -208,6 +208,12 @@ impl WebDavRouter for Router {
     }
 }
 
+#[handler]
+async fn test(req: &mut Request, _res: &mut Response) {
+    let method = req.method();
+    info!("method: {:?}", method);
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -219,6 +225,7 @@ async fn main() {
         .push(
             Router::with_path("<bucket>/<**path>")
                 .hoop(BasicAuth::new(Validator))
+                .hoop(test)
                 .get(get_handler)
                 .head(ok_handler)
                 .put(put_handler)

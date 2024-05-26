@@ -1,12 +1,18 @@
 use aws_sdk_s3::operation::get_object::GetObjectOutput;
 use aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Output;
 use std::io::Cursor;
+use std::path::Path;
 use xml::writer::XmlEvent;
 use xml::EmitterConfig;
 
 pub enum S3ObjectOutput {
     GetObject(GetObjectOutput),
     ListObjects(ListObjectsV2Output),
+}
+
+fn get_filename_from_path(path: &str) -> Option<&str> {
+    let path = Path::new(path);
+    path.file_name()?.to_str()
 }
 
 pub fn generate_webdav_propfind_response(
@@ -24,7 +30,10 @@ pub fn generate_webdav_propfind_response(
     }
 }
 
-fn propfind_single(bucket: &str, key: &str, _objects: GetObjectOutput) -> String {
+fn propfind_single(bucket: &str, key: &str, objects: GetObjectOutput) -> String {
+    let file_name = get_filename_from_path(key).unwrap();
+    let size = objects.content_length().unwrap_or(0);
+    let last_modified = objects.last_modified().unwrap().to_string();
     let mut buffer = Cursor::new(Vec::new());
     let mut writer = EmitterConfig::new()
         .perform_indent(true)
@@ -47,21 +56,21 @@ fn propfind_single(bucket: &str, key: &str, _objects: GetObjectOutput) -> String
     writer
         .write(XmlEvent::start_element("displayname"))
         .unwrap();
-    writer.write(XmlEvent::characters(key)).unwrap();
+    writer.write(XmlEvent::characters(file_name)).unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // displayname
 
     writer
         .write(XmlEvent::start_element("getcontentlength"))
         .unwrap();
-    writer.write(XmlEvent::characters("0")).unwrap();
+    writer
+        .write(XmlEvent::characters(&size.to_string()))
+        .unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // getcontentlength
 
     writer
         .write(XmlEvent::start_element("getlastmodified"))
         .unwrap();
-    writer
-        .write(XmlEvent::characters("2021-01-01T00:00:00Z"))
-        .unwrap();
+    writer.write(XmlEvent::characters(&last_modified)).unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // getlastmodified
 
     writer
@@ -130,8 +139,8 @@ fn propfind_multiple(bucket: &str, key: &str, objects: ListObjectsV2Output) -> S
 
     // File responses
     for object in objects.contents() {
-        let key = object.key().unwrap_or("");
-        let size = object.size();
+        let file_name = get_filename_from_path(object.key().unwrap()).unwrap();
+        let size = object.size().unwrap_or(0);
         let last_modified = object.last_modified().unwrap().to_string();
 
         writer.write(XmlEvent::start_element("response")).unwrap();
@@ -147,14 +156,14 @@ fn propfind_multiple(bucket: &str, key: &str, objects: ListObjectsV2Output) -> S
         writer
             .write(XmlEvent::start_element("displayname"))
             .unwrap();
-        writer.write(XmlEvent::characters(&key)).unwrap();
+        writer.write(XmlEvent::characters(file_name)).unwrap();
         writer.write(XmlEvent::end_element()).unwrap(); // displayname
 
         writer
             .write(XmlEvent::start_element("getcontentlength"))
             .unwrap();
         writer
-            .write(XmlEvent::characters(&size.unwrap().to_string()))
+            .write(XmlEvent::characters(&size.to_string()))
             .unwrap();
         writer.write(XmlEvent::end_element()).unwrap(); // getcontentlength
 
