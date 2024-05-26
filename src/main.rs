@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
 use tokio::sync::OnceCell;
-use tracing::warn;
+use tracing::{error, warn};
 use utils::s3::{
     fetch_file_from_s3, init_client, is_folder, list_objects_in_s3, upload_file_to_s3,
 };
@@ -75,14 +75,14 @@ async fn put_handler(req: &mut Request, res: &mut Response) {
 
 #[handler]
 fn copy_handler(_req: &mut Request, res: &mut Response) {
-    warn!("copy_handler");
-    res.status_code(StatusCode::OK).render(Text::Plain("COPY"));
+    error!("copy_handler");
+    res.status_code(StatusCode::NOT_IMPLEMENTED);
 }
 
 #[handler]
 fn move_handler(_req: &mut Request, res: &mut Response) {
-    warn!("move_handler");
-    res.status_code(StatusCode::OK).render(Text::Plain("MOVE"));
+    error!("move_handler");
+    res.status_code(StatusCode::NOT_IMPLEMENTED);
 }
 
 #[handler]
@@ -130,7 +130,6 @@ async fn propfind_handler(req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn mkcol_handler(req: &mut Request, res: &mut Response) {
-    warn!("mkcol handler");
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let path = req.params().get("**path").cloned().unwrap_or_default();
 
@@ -160,6 +159,55 @@ impl BasicAuthValidator for Validator {
     }
 }
 
+trait WebDavRouter {
+    fn webdav_propfind<H: Handler>(self, goal: H) -> Self;
+    fn webdav_copy<H: Handler>(self, goal: H) -> Self;
+    fn webdav_move<H: Handler>(self, goal: H) -> Self;
+    fn webdav_mkcol<H: Handler>(self, goal: H) -> Self;
+}
+
+impl WebDavRouter for Router {
+    #[inline]
+    fn webdav_propfind<H: Handler>(self, goal: H) -> Self {
+        self.push(
+            Router::with_filter_fn(|req, _| {
+                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
+            })
+            .goal(goal),
+        )
+    }
+
+    #[inline]
+    fn webdav_copy<H: Handler>(self, goal: H) -> Self {
+        self.push(
+            Router::with_filter_fn(|req, _| {
+                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
+            })
+            .goal(goal),
+        )
+    }
+
+    #[inline]
+    fn webdav_move<H: Handler>(self, goal: H) -> Self {
+        self.push(
+            Router::with_filter_fn(|req, _| {
+                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
+            })
+            .goal(goal),
+        )
+    }
+
+    #[inline]
+    fn webdav_mkcol<H: Handler>(self, goal: H) -> Self {
+        self.push(
+            Router::with_filter_fn(|req, _| {
+                req.method() == Method::from_bytes(b"PROPFIND").unwrap()
+            })
+            .goal(goal),
+        )
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -175,28 +223,10 @@ async fn main() {
                 .head(ok_handler)
                 .put(put_handler)
                 .delete(ok_handler)
-                .push(
-                    Router::new()
-                        .filter_fn(|req, _| {
-                            req.method() == Method::from_bytes(b"PROPFIND").unwrap()
-                        })
-                        .goal(propfind_handler),
-                )
-                .push(
-                    Router::new()
-                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"MKCOL").unwrap())
-                        .goal(mkcol_handler),
-                )
-                .push(
-                    Router::new()
-                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"COPY").unwrap())
-                        .goal(copy_handler),
-                )
-                .push(
-                    Router::new()
-                        .filter_fn(|req, _| req.method() == Method::from_bytes(b"MOVE").unwrap())
-                        .goal(move_handler),
-                ),
+                .webdav_propfind(propfind_handler)
+                .webdav_mkcol(mkcol_handler)
+                .webdav_copy(copy_handler)
+                .webdav_move(move_handler),
         );
 
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
