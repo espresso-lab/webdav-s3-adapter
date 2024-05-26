@@ -260,6 +260,8 @@ async fn main() {
                 .webdav_move(move_handler),
         );
 
+    let service = Service::new(router).hoop(Logger::new());
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
-    Server::new(acceptor).serve(router).await;
+
+    Server::new(acceptor).serve(service).await;
 }

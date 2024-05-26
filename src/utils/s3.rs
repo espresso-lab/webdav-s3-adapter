@@ -1,5 +1,6 @@
 use std::env;
 
+use aws_config::Region;
 use aws_sdk_s3::{
     config::Credentials,
     operation::{
@@ -9,28 +10,29 @@ use aws_sdk_s3::{
     primitives::ByteStream,
     Client,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn init_client_for_auth(access_key_id: String, secret_access_key: String) -> Client {
-    let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "_");
-
-    // let config: aws_config::SdkConfig = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let s3_endpoint = env::var("S3_ENDPOINT").unwrap_or("".to_string());
-    // if s3_endpoint.is_empty() {
-    //     return aws_sdk_s3::Client::new(&config);
-    // }
-
-    let local_config = aws_sdk_s3::config::Builder::new()
-        .endpoint_url(s3_endpoint)
-        .force_path_style(
-            env::var("S3_FORCE_PATH_STYLE")
-                .unwrap_or("".to_string())
-                .eq("true"),
-        )
-        .credentials_provider(credentials)
-        .build();
-
-    return aws_sdk_s3::Client::from_conf(local_config);
+    aws_sdk_s3::Client::from_conf(
+        aws_sdk_s3::config::Builder::new()
+            .endpoint_url(env::var("S3_ENDPOINT").unwrap_or("".to_string()))
+            .region(Region::new(
+                env::var("AWS_REGION").unwrap_or("".to_string()),
+            ))
+            .force_path_style(
+                env::var("S3_FORCE_PATH_STYLE")
+                    .unwrap_or("".to_string())
+                    .eq("true"),
+            )
+            .credentials_provider(Credentials::new(
+                access_key_id,
+                secret_access_key,
+                None,
+                None,
+                "_",
+            ))
+            .build(),
+    )
 }
 
 pub async fn fetch_file_from_s3(
