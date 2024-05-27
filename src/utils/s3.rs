@@ -14,7 +14,7 @@ use aws_sdk_s3::{
 pub async fn init_client_for_auth(access_key_id: String, secret_access_key: String) -> Client {
     aws_sdk_s3::Client::from_conf(
         aws_sdk_s3::config::Builder::new()
-            .endpoint_url(env::var("S3_ENDPOINT").unwrap_or("".to_string()))
+            .endpoint_url(env::var("S3_ENDPOINT").unwrap())
             .region(Region::new(
                 env::var("AWS_REGION").unwrap_or("".to_string()),
             ))
