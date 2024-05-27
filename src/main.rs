@@ -1,9 +1,10 @@
 mod utils;
+
 use aws_sdk_s3::primitives::ByteStream;
 use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error};
 use utils::s3::{
     fetch_file_from_s3, init_client_for_auth, is_folder, list_objects_in_s3, upload_file_to_s3,
 };
@@ -231,12 +232,6 @@ impl WebDavRouter for Router {
     }
 }
 
-#[handler]
-async fn test(req: &mut Request, _res: &mut Response) {
-    let method = req.method();
-    info!("method: {:?}", method);
-}
-
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -246,17 +241,16 @@ async fn main() {
         .push(Router::with_path("/status").get(ok_handler))
         .push(
             Router::with_path("<bucket>/<**path>")
-                .hoop(BasicAuth::new(Validator))
-                .hoop(test)
-                .get(get_handler)
                 .head(ok_handler)
+                .options(options_handler)
+                .hoop(BasicAuth::new(Validator))
+                .get(get_handler)
                 .put(put_handler)
                 .delete(ok_handler)
                 .webdav_propfind(propfind_handler)
                 .webdav_mkcol(mkcol_handler)
                 .webdav_copy(copy_handler)
-                .webdav_move(move_handler)
-                .options(options_handler), // TODO: Maybe before auth
+                .webdav_move(move_handler), // TODO: Maybe before auth
         );
 
     let service = Service::new(router).hoop(Logger::new());

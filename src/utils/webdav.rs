@@ -137,6 +137,46 @@ fn propfind_multiple(bucket: &str, key: &str, objects: ListObjectsV2Output) -> S
 
     writer.write(XmlEvent::end_element()).unwrap(); // response
 
+    for prefix in objects.common_prefixes() {
+        let folder_name = get_filename_from_path(prefix.prefix().unwrap()).unwrap();
+
+        writer.write(XmlEvent::start_element("response")).unwrap();
+        writer.write(XmlEvent::start_element("href")).unwrap();
+        writer
+            .write(XmlEvent::characters(&format!(
+                "/{}/{}",
+                bucket, folder_name
+            )))
+            .unwrap();
+        writer.write(XmlEvent::end_element()).unwrap(); // href
+
+        writer.write(XmlEvent::start_element("propstat")).unwrap();
+        writer.write(XmlEvent::start_element("prop")).unwrap();
+
+        writer
+            .write(XmlEvent::start_element("displayname"))
+            .unwrap();
+        writer.write(XmlEvent::characters(folder_name)).unwrap();
+        writer.write(XmlEvent::end_element()).unwrap(); // displayname
+
+        writer
+            .write(XmlEvent::start_element("resourcetype"))
+            .unwrap();
+        writer.write(XmlEvent::start_element("collection")).unwrap();
+        writer.write(XmlEvent::end_element()).unwrap(); // collection
+        writer.write(XmlEvent::end_element()).unwrap(); // resourcetype
+
+        writer.write(XmlEvent::end_element()).unwrap(); // prop
+        writer.write(XmlEvent::start_element("status")).unwrap();
+        writer
+            .write(XmlEvent::characters("HTTP/1.1 200 OK"))
+            .unwrap();
+        writer.write(XmlEvent::end_element()).unwrap(); // status
+        writer.write(XmlEvent::end_element()).unwrap(); // propstat
+
+        writer.write(XmlEvent::end_element()).unwrap(); // response
+    }
+
     // File responses
     for object in objects.contents() {
         let file_name = get_filename_from_path(object.key().unwrap()).unwrap();
