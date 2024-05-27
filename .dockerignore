@@ -1,0 +1,11 @@
+/target
+/Dockerfile
+/docker-compose.yml
+/.dockerignore
+/.gitignore
+/README.md
+/verify.http
+/.env
+/.env.sample
+/.github
+/.idea
