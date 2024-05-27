@@ -4,13 +4,12 @@ use aws_config::Region;
 use aws_sdk_s3::{
     config::Credentials,
     operation::{
-        delete_object::DeleteObjectOutput, get_object::GetObjectOutput,
-        list_objects_v2::ListObjectsV2Output, put_object::PutObjectOutput,
+        delete_object::DeleteObjectOutput, list_objects_v2::ListObjectsV2Output,
+        put_object::PutObjectOutput,
     },
     primitives::ByteStream,
     Client,
 };
-use tracing::{info, warn};
 
 pub async fn init_client_for_auth(access_key_id: String, secret_access_key: String) -> Client {
     aws_sdk_s3::Client::from_conf(
@@ -99,67 +98,33 @@ pub async fn delete_file_from_s3(
     Ok(result)
 }
 
-pub async fn delete_files_from_s3(
-    client: &Client,
-    bucket: &str,
-    keys: Vec<String>,
-) -> Result<(), aws_sdk_s3::Error> {
-    for key in keys {
-        delete_file_from_s3(client, bucket, &key).await?;
-    }
+// pub async fn delete_files_from_s3(
+//     client: &Client,
+//     bucket: &str,
+//     keys: Vec<String>,
+// ) -> Result<(), aws_sdk_s3::Error> {
+//     for key in keys {
+//         delete_file_from_s3(client, bucket, &key).await?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-pub async fn delete_folder_from_s3(
-    client: &Client,
-    bucket: &str,
-    prefix: &str,
-) -> Result<(), aws_sdk_s3::Error> {
-    let result = list_objects_in_s3(client, bucket, prefix, None).await?;
-    let mut keys = Vec::new();
-    if let Some(contents) = result.contents {
-        for object in contents {
-            if let Some(key) = object.key() {
-                keys.push(key.to_string());
-            }
-        }
-    }
-    delete_files_from_s3(client, bucket, keys).await?;
+// pub async fn delete_folder_from_s3(
+//     client: &Client,
+//     bucket: &str,
+//     prefix: &str,
+// ) -> Result<(), aws_sdk_s3::Error> {
+//     let result = list_objects_in_s3(client, bucket, prefix, None).await?;
+//     let mut keys = Vec::new();
+//     if let Some(contents) = result.contents {
+//         for object in contents {
+//             if let Some(key) = object.key() {
+//                 keys.push(key.to_string());
+//             }
+//         }
+//     }
+//     delete_files_from_s3(client, bucket, keys).await?;
 
-    Ok(())
-}
-
-pub async fn get_object(
-    client: &Client,
-    bucket: &str,
-    key: &str,
-) -> Result<GetObjectOutput, aws_sdk_s3::Error> {
-    let result = client.get_object().bucket(bucket).key(key).send().await?;
-
-    Ok(result)
-}
-
-pub async fn is_folder(
-    client: &Client,
-    bucket: &str,
-    key: &str,
-) -> Result<bool, aws_sdk_s3::Error> {
-    if key.is_empty() {
-        return Ok(true);
-    }
-    let prefix = if key.ends_with('/') {
-        key.to_string()
-    } else {
-        format!("{}/", key)
-    };
-    let result: ListObjectsV2Output = client
-        .list_objects_v2()
-        .bucket(bucket)
-        .prefix(&prefix)
-        .max_keys(1)
-        .send()
-        .await?;
-
-    Ok(result.key_count().unwrap_or_default() > 0)
-}
+//     Ok(())
+// }

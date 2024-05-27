@@ -4,13 +4,13 @@ use aws_sdk_s3::primitives::ByteStream;
 use dotenv::dotenv;
 use salvo::http::{Method, StatusCode};
 use salvo::prelude::*;
-use tracing::{debug, error};
+use tracing::debug;
 use utils::s3::{
-    fetch_file_from_s3, init_client_for_auth, is_folder, list_objects_in_s3, upload_file_to_s3,
+    delete_file_from_s3, fetch_file_from_s3, init_client_for_auth, list_objects_in_s3,
+    upload_file_to_s3,
 };
 
-use crate::utils::s3::get_object;
-use crate::utils::webdav::{generate_webdav_propfind_response, S3ObjectOutput};
+use crate::utils::webdav::generate_webdav_propfind_response;
 
 #[handler]
 fn ok_handler(_req: &mut Request, res: &mut Response) {
@@ -50,7 +50,8 @@ async fn put_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
-    let byte_stream = match req.payload().await {
+    // set payload max size to 10GB
+    let byte_stream = match req.payload_with_max_size(10 * 1024 * 1024 * 1024).await {
         Ok(bytes) => ByteStream::from(bytes.clone()),
         Err(_) => {
             res.status_code(StatusCode::BAD_REQUEST);
@@ -83,22 +84,39 @@ async fn put_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
 }
 
 #[handler]
+async fn delete_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
+    let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
+    let key = req.params().get("**path").cloned().unwrap_or_default();
+
+    let aws_client = init_client_for_auth(
+        depot.get::<String>("auth_user").unwrap().to_string(),
+        depot.get::<String>("auth_pass").unwrap().to_string(),
+    )
+    .await;
+
+    match delete_file_from_s3(&aws_client, &bucket_name, &key).await {
+        Ok(_) => {
+            res.status_code(StatusCode::NO_CONTENT);
+        }
+        Err(_) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+}
+
+#[handler]
 fn copy_handler(_req: &mut Request, res: &mut Response) {
-    error!("copy_handler");
     res.status_code(StatusCode::NOT_IMPLEMENTED);
 }
 
 #[handler]
 fn move_handler(_req: &mut Request, res: &mut Response) {
-    error!("move_handler");
     res.status_code(StatusCode::NOT_IMPLEMENTED);
 }
 
 #[handler]
 fn options_handler(_req: &mut Request, res: &mut Response) {
-    error!("options");
     res.status_code(StatusCode::FOUND);
-    // res.status_code(StatusCode::NOT_IMPLEMENTED);
 }
 
 #[handler]
@@ -118,38 +136,14 @@ async fn propfind_handler(req: &mut Request, res: &mut Response, depot: &mut Dep
         depot.get::<String>("auth_pass").unwrap().to_string()
     );
 
-    if is_folder(&aws_client, &bucket_name, &key)
-        .await
-        .unwrap_or_default()
-    {
-        match list_objects_in_s3(&aws_client, &bucket_name, &key, Some("/")).await {
-            Ok(obj) => {
-                let response = generate_webdav_propfind_response(
-                    &bucket_name,
-                    &key,
-                    S3ObjectOutput::ListObjects(obj),
-                );
-                res.status_code(StatusCode::MULTI_STATUS)
-                    .render(Text::Xml(response));
-            }
-            Err(_) => {
-                res.status_code(StatusCode::NOT_FOUND);
-            }
+    match list_objects_in_s3(&aws_client, &bucket_name, &key, Some("/")).await {
+        Ok(obj) => {
+            let response = generate_webdav_propfind_response(&bucket_name, obj);
+            res.status_code(StatusCode::MULTI_STATUS)
+                .render(Text::Xml(response));
         }
-    } else {
-        match get_object(&aws_client, &bucket_name, &key).await {
-            Ok(obj) => {
-                let response = generate_webdav_propfind_response(
-                    &bucket_name,
-                    &key,
-                    S3ObjectOutput::GetObject(obj),
-                );
-                res.status_code(StatusCode::MULTI_STATUS)
-                    .render(Text::Xml(response));
-            }
-            Err(_) => {
-                res.status_code(StatusCode::NOT_FOUND);
-            }
+        Err(_) => {
+            res.status_code(StatusCode::NOT_FOUND);
         }
     }
 }
@@ -240,13 +234,13 @@ async fn main() {
     let router = Router::new()
         .push(Router::with_path("/status").get(ok_handler))
         .push(
-            Router::with_path("<bucket>/<**path>")
+            Router::with_path("/<bucket>/<**path>")
+                .hoop(BasicAuth::new(Validator))
                 .head(ok_handler)
                 .options(options_handler)
-                .hoop(BasicAuth::new(Validator))
                 .get(get_handler)
                 .put(put_handler)
-                .delete(ok_handler)
+                .delete(delete_handler)
                 .webdav_propfind(propfind_handler)
                 .webdav_mkcol(mkcol_handler)
                 .webdav_copy(copy_handler)
