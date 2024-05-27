@@ -26,5 +26,6 @@ RUN upx --best --lzma ./webdav-s3-adapter
 
 FROM scratch AS runtime
 COPY --from=builder /app/webdav-s3-adapter /app
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 3000
 CMD ["/app"]
