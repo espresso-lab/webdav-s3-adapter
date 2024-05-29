@@ -13,6 +13,7 @@ COPY --from=planner /app/recipe.json recipe.json
 COPY platform.sh .
 RUN chmod +x platform.sh
 RUN ./platform.sh
+RUN rustup target add $(cat /.platform)
 RUN curl -sSL $(curl -s https://api.github.com/repos/upx/upx/releases/latest \
     | grep browser_download_url | grep $TARGETARCH | cut -d '"' -f 4) -o upx.tar.xz
 RUN tar -xf upx.tar.xz \
