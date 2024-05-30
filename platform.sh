@@ -4,9 +4,9 @@
 
 case $TARGETARCH in
     "amd64")
-	echo "x86_64-unknown-linux-musl" > /.platform
+	echo "x86_64-unknown-linux-gnu" > /.platform
 	;;
     "arm64") 
-	echo "aarch64-unknown-linux-musl" > /.platform
+	echo "aarch64-unknown-linux-gnu" > /.platform
 	;;
 esac
