@@ -1,13 +1,13 @@
-FROM clux/muslrust:stable AS chef
+FROM --platform=$BUILDPLATFORM clux/muslrust:stable AS chef
 USER root
 RUN cargo install cargo-chef
 WORKDIR /app
 
-FROM chef AS planner
+FROM --platform=$BUILDPLATFORM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM chef AS builder
+FROM --platform=$BUILDPLATFORM chef AS builder
 ARG TARGETARCH
 COPY --from=planner /app/recipe.json recipe.json
 COPY platform.sh .
@@ -25,7 +25,7 @@ RUN cargo build --release --target $(cat /.platform) --bin webdav-s3-adapter
 RUN mv ./target/$(cat /.platform)/release/webdav-s3-adapter ./webdav-s3-adapter
 RUN upx --best --lzma ./webdav-s3-adapter
 
-FROM scratch AS runtime
+FROM --platform=$BUILDPLATFORM scratch AS runtime
 COPY --from=builder /app/webdav-s3-adapter /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 3000
