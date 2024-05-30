@@ -50,7 +50,6 @@ async fn put_handler(req: &mut Request, res: &mut Response, depot: &mut Depot) {
     let bucket_name = req.params().get("bucket").cloned().unwrap_or_default();
     let key = req.params().get("**path").cloned().unwrap_or_default();
 
-    // set payload max size to 10GB
     let byte_stream = match req.payload_with_max_size(10 * 1024 * 1024 * 1024).await {
         Ok(bytes) => ByteStream::from(bytes.clone()),
         Err(_) => {
