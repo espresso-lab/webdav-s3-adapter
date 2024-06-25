@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 
 This container acts as adapter to integrate S3 with WebDAV. Initially this solution was created to link Enpass to a self-hosted Minio (S3-Storage).
+You will have to provide the AWS Credentials as WebDAV Basic Auth.
 
 ## Features
 
