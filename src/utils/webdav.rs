@@ -21,9 +21,10 @@ pub fn generate_webdav_propfind_response(bucket: &str, objects: ListObjectsV2Out
 
     // Folder response
     for prefix in objects.common_prefixes() {
+        let pattern: char = "/";
         let folder_name = get_filename_from_path(prefix.prefix().unwrap())
             .unwrap()
-            .trim_end_matches('/');
+            .trim_end_matches(pattern);
         writer.write(XmlEvent::start_element("response")).unwrap();
         writer.write(XmlEvent::start_element("href")).unwrap();
         writer
